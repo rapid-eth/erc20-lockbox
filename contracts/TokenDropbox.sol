@@ -29,8 +29,9 @@ contract TokenDropbox{
         bytes32 certHash = getCertificateHash(_amount, msg.sender, _from, _erc20, _nonce);
 
         // Verify signature is valid for the hash
-        // require(_verifySignature(certHash, _signature, _from), "Certificate Signature Not Valid");
-        require(verifyCertificate(_from, msg.sender, _erc20, _amount, _signature, _nonce), "Certificate Signature Not Valid");
+        require(_verifySignature(certHash, _signature, _from), "Certificate Signature Not Valid");
+        //require(verifyCertificate(_from, msg.sender, _erc20, _amount, _nonce, _signature), "Certificate Signature Not Valid");
+
         // Verify that certificate is not already claimed
         require(!certificateClaimed[certHash], "Certificate already claimed");
 
@@ -40,11 +41,41 @@ contract TokenDropbox{
         require(ERC20.transferFrom(_from, msg.sender, _amount), "Transfer Failed");
     }
 
-    function addDelegate(address _delegate) external {
+    /// Redeem
+    function redeemSigned(
+        address _to,
+        address _from,
+        address _erc20,
+        uint256 _amount,
+        uint256 _nonce,
+        bytes calldata _certSignature,
+        bytes calldata _sig2
+    )
+        external
+    {
+        // Recreate hash from params
+        bytes32  certHash = getCertificateHash(_amount, _to, _from, _erc20, _nonce);
+
+        // Verify signature is valid for the hash
+        // require(_verifySignature(certHash, _signature, _from), "Certificate Signature Not Valid");
+        require(_verifySignature(certHash, _certSignature, _from), "Certificate Signature Not Valid");
+        // Verify that certificate is not already claimed
+        require(!certificateClaimed[certHash], "Certificate already claimed");
+
+        // Verify that the original certificate was signed over to the new redeemer from the original _to address in the cert
+        require(procurationSigner(_certSignature, _sig2, msg.sender)==_to, "");
+
+        // Mark Claimed and transfer to recipient
+        certificateClaimed[certHash] = true;
+        IERC20 ERC20 = IERC20(_erc20);
+        require(ERC20.transferFrom(_from, msg.sender, _amount), "Transfer Failed");
+    }
+
+    function addAdminDelegate(address _delegate) external {
         delegates[msg.sender][_delegate] = true;
     }
-    
-    function removeDelegate(address _delegate) external {
+
+    function removeAdminDelegate(address _delegate) external {
         delegates[msg.sender][_delegate] = false;
     }
 
@@ -70,12 +101,24 @@ contract TokenDropbox{
         address _recipient,
         address _erc20,
         uint256 _amount,
-        bytes memory _signature,
-        uint256 _nonce)
-        public view returns (bool)
+        uint256 _nonce,
+        bytes memory _signature
+    )
+       public view returns (bool)
     {
         bytes32 certHash = getCertificateHash(_amount, _recipient, _from, _erc20, _nonce);
         return _verifySignature(certHash, _signature, _from);
+    }
+
+    function procurationSigner(
+        bytes memory _certificateSignature,
+        bytes memory _procurationSigature,
+        address _newRedeemer
+    )
+       public pure returns (address)
+    {
+        bytes32 h = keccak256(abi.encodePacked(_certificateSignature,_newRedeemer));
+        return h.toEthSignedMessageHash().recover(_procurationSigature);
     }
 
     /************
