@@ -4,7 +4,7 @@ import "./token/ERC20/IERC20.sol";
 import "./cryptography/ECDSA.sol";
 import "./math/SafeMath.sol";
 
-contract TokenDropbox{
+contract TokenLockbox{
 
     using ECDSA for bytes32;
     using SafeMath for uint256;
